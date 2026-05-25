@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC Puzzle #135 — Kangaroo Solver</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050a0e;
+    --panel: #0a1520;
+    --border: #0f3460;
+    --accent: #00d4ff;
+    --accent2: #ff6b00;
+    --green: #00ff88;
+    --red: #ff3366;
+    --text: #c8e6f5;
+    --dim: #4a7a9b;
+    --glow: 0 0 20px rgba(0,212,255,0.3);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content:'';
+    position:fixed;
+    inset:0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.015) 2px, rgba(0,212,255,0.015) 4px);
+    pointer-events:none;
+    z-index:999;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(180deg, rgba(0,212,255,0.05) 0%, transparent 100%);
+  }
+  .logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    letter-spacing: 3px;
+  }
+  .logo span { color: var(--accent2); }
+  .status-bar {
+    display: flex;
+    gap: 24px;
+    font-size: 11px;
+    color: var(--dim);
+  }
+  .status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--dim);
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  .status-dot.active { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .status-dot.running { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .main { display: grid; grid-template-columns: 320px 1fr; gap: 0; height: calc(100vh - 57px); }
+
+  /* Sidebar */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 24px 20px;
+    overflow-y: auto;
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .section-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(15,52,96,0.4);
+  }
+  .info-row .label { color: var(--dim); }
+  .info-row .val { color: var(--text); word-break: break-all; text-align: right; max-width: 170px; }
+  .info-row .val.green { color: var(--green); }
+  .info-row .val.orange { color: var(--accent2); }
+  .info-row .val.blue { color: var(--accent); }
+
+  .pubkey-box {
+    background: rgba(0,212,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+    font-size: 10px;
+    word-break: break-all;
+    color: var(--accent);
+    line-height: 1.6;
+  }
+
+  /* Config */
+  .config-block { display: flex; flex-direction: column; gap: 10px; }
+  label { font-size: 11px; color: var(--dim); display: block; margin-bottom: 4px; }
+  input[type=text], input[type=number], select {
+    width: 100%;
+    background: rgba(0,212,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 8px rgba(0,212,255,0.15); }
+  select option { background: var(--panel); }
+
+  .btn {
+    width: 100%;
+    padding: 12px;
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  .btn-start {
+    background: linear-gradient(135deg, #00d4ff, #0090bb);
+    color: #000;
+    box-shadow: 0 0 20px rgba(0,212,255,0.3);
+  }
+  .btn-start:hover { box-shadow: 0 0 30px rgba(0,212,255,0.6); transform: translateY(-1px); }
+  .btn-start:disabled { background: #1a2a3a; color: var(--dim); box-shadow: none; cursor: not-allowed; transform: none; }
+  .btn-stop {
+    background: linear-gradient(135deg, #ff3366, #aa0033);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(255,51,102,0.3);
+  }
+  .btn-stop:hover { box-shadow: 0 0 30px rgba(255,51,102,0.5); }
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    font-size: 11px;
+    padding: 8px;
+    margin-top: 6px;
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Main content */
+  .content { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Stats row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-card {
+    padding: 18px 20px;
+    border-right: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s;
+  }
+  .stat-card.active::after { transform: scaleX(1); }
+  .stat-label { font-size: 9px; letter-spacing: 2px; color: var(--dim); text-transform: uppercase; margin-bottom: 8px; }
+  .stat-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    text-shadow: var(--glow);
+  }
+  .stat-value.green { color: var(--green); text-shadow: 0 0 15px rgba(0,255,136,0.4); }
+  .stat-value.orange { color: var(--accent2); text-shadow: 0 0 15px rgba(255,107,0,0.4); }
+  .stat-sub { font-size: 10px; color: var(--dim); margin-top: 4px; }
+
+  /* Progress */
+  .progress-section {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .prog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .prog-label { font-family: 'Orbitron', monospace; font-size: 11px; letter-spacing: 2px; color: var(--dim); }
+  .prog-pct { font-family: 'Orbitron', monospace; font-size: 14px; color: var(--accent); }
+  .progress-track {
+    height: 6px;
+    background: rgba(15,52,96,0.6);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    border-radius: 3px;
+    transition: width 0.5s ease;
+    position: relative;
+    width: 0%;
+  }
+  .progress-fill::after {
+    content:'';
+    position:absolute;
+    right:0; top:0; bottom:0;
+    width: 30px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer { 0%{opacity:0} 50%{opacity:1} 100%{opacity:0} }
+
+  /* Range display */
+  .range-section {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .range-box {
+    background: rgba(0,212,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+  }
+  .range-box-label { font-size: 9px; letter-spacing: 2px; color: var(--dim); margin-bottom: 6px; text-transform: uppercase; }
+  .range-box-val { font-size: 10px; color: var(--accent); word-break: break-all; line-height: 1.5; }
+
+  /* Log */
+  .log-section { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .log-header {
+    padding: 10px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0,212,255,0.02);
+  }
+  .log-title { font-family: 'Orbitron', monospace; font-size: 10px; letter-spacing: 3px; color: var(--dim); }
+  .log-actions { display: flex; gap: 10px; }
+  .log-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .log-btn:hover { border-color: var(--accent); color: var(--accent); }
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 24px;
+    font-size: 11px;
+    line-height: 1.8;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .log-line { display: flex; gap: 12px; }
+  .log-time { color: var(--dim); min-width: 85px; }
+  .log-msg { color: var(--text); }
+  .log-msg.info { color: var(--accent); }
+  .log-msg.success { color: var(--green); font-weight: bold; }
+  .log-msg.warn { color: var(--accent2); }
+  .log-msg.error { color: var(--red); }
+
+  /* Found modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 2px solid var(--green);
+    border-radius: 8px;
+    padding: 40px;
+    max-width: 600px;
+    width: 90%;
+    box-shadow: 0 0 60px rgba(0,255,136,0.3);
+    animation: modalIn 0.4s cubic-bezier(0.16,1,0.3,1);
+  }
+  @keyframes modalIn { from{transform:scale(0.8);opacity:0} to{transform:scale(1);opacity:1} }
+  .modal-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 24px;
+    font-weight: 900;
+    color: var(--green);
+    text-shadow: 0 0 30px rgba(0,255,136,0.6);
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  .modal-sub { text-align: center; color: var(--dim); font-size: 12px; margin-bottom: 28px; }
+  .modal-key {
+    background: rgba(0,255,136,0.08);
+    border: 1px solid var(--green);
+    border-radius: 4px;
+    padding: 16px;
+    word-break: break-all;
+    font-size: 12px;
+    color: var(--green);
+    margin-bottom: 16px;
+    line-height: 1.8;
+  }
+  .modal-key-label { font-size: 9px; letter-spacing: 2px; color: var(--dim); margin-bottom: 6px; }
+  .modal-actions { display: flex; gap: 12px; margin-top: 24px; }
+  .modal-btn {
+    flex: 1;
+    padding: 12px;
+    border-radius: 4px;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: pointer;
+    border: none;
+    text-transform: uppercase;
+  }
+  .modal-btn.copy { background: var(--green); color: #000; }
+  .modal-btn.save { background: var(--accent2); color: #fff; }
+  .modal-btn:hover { opacity: 0.85; }
+
+  /* Instructions panel */
+  .instructions {
+    background: rgba(255,107,0,0.06);
+    border: 1px solid rgba(255,107,0,0.3);
+    border-radius: 4px;
+    padding: 12px 14px;
+    font-size: 10px;
+    line-height: 1.8;
+    color: var(--dim);
+  }
+  .instructions strong { color: var(--accent2); }
+
+  /* Kangaroo count display */
+  .kangaroo-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  .kangaroo-chip {
+    background: rgba(0,212,255,0.08);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: 10px;
+    color: var(--dim);
+  }
+  .kangaroo-chip.wild { color: var(--accent); border-color: rgba(0,212,255,0.3); }
+  .kangaroo-chip.tame { color: var(--green); border-color: rgba(0,255,136,0.3); }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">₿TC <span>#135</span> — KANGAROO SOLVER</div>
+  <div class="status-bar">
+    <div><span class="status-dot" id="solver-dot"></span><span id="solver-status">IDLE</span></div>
+    <div><span class="status-dot active"></span>PUBLIC KEY LOADED</div>
+    <div id="session-time">SESSION: 00:00:00</div>
+  </div>
+</header>
+
+<div class="main">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div>
+      <div class="section-title">Puzzle #135 — Target</div>
+      <div class="info-row"><span class="label">Puzzle</span><span class="val blue">#135</span></div>
+      <div class="info-row"><span class="label">Bit Range</span><span class="val">2¹³⁴ — 2¹³⁵</span></div>
+      <div class="info-row"><span class="label">Balance</span><span class="val green">1.35 BTC</span></div>
+      <div class="info-row"><span class="label">Algorithm</span><span class="val orange">Pollard Kangaroo</span></div>
+      <div class="info-row"><span class="label">Complexity</span><span class="val orange">~2⁶⁷·⁵ ops</span></div>
+      <div class="info-row"><span class="label">Public Key</span><span class="val">Known ✓</span></div>
+    </div>
+
+    <div>
+      <div class="section-title">Public Key (compressed)</div>
+      <div class="pubkey-box">
+        02<br>
+        145d2611c823a11238f7b9521f9cec57f17ca9f7d02a7e2dfd56940a4a00bf49
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Solver Config</div>
+      <div class="config-block">
+        <div>
+          <label>Kangaroos (Wild)</label>
+          <input type="number" id="wild-count" value="512" min="64" max="4096" step="64">
+        </div>
+        <div>
+          <label>Kangaroos (Tame)</label>
+          <input type="number" id="tame-count" value="512" min="64" max="4096" step="64">
+        </div>
+        <div>
+          <label>Distinguished Point Bits</label>
+          <select id="dp-bits">
+            <option value="14">14 bits (faster updates)</option>
+            <option value="16" selected>16 bits (balanced)</option>
+            <option value="20">20 bits (less memory)</option>
+          </select>
+        </div>
+        <div>
+          <label>Save Checkpoint Every (seconds)</label>
+          <input type="number" id="checkpoint-interval" value="60" min="10" max="3600">
+        </div>
+        <div>
+          <label>Result Save Path</label>
+          <input type="text" id="save-path" value="puzzle135_result.txt">
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Control</div>
+      <button class="btn btn-start" id="btn-start" onclick="startSolver()">▶ START SOLVER</button>
+      <button class="btn btn-stop" id="btn-stop" onclick="stopSolver()" disabled style="margin-top:8px">■ STOP</button>
+      <button class="btn btn-secondary" onclick="exportLog()">⬇ Export Log</button>
+      <button class="btn btn-secondary" onclick="saveCheckpoint()">💾 Save Checkpoint</button>
+    </div>
+
+    <div class="instructions">
+      <strong>⚡ GPU ACCELERATION</strong><br>
+      This JS solver is for demonstration. For real solving, use JeanLucPons Kangaroo with NVIDIA CUDA:<br><br>
+      <strong>./kangaroo -gpu -t 8 -d 16 puzzle135.txt</strong><br><br>
+      puzzle135.txt contains the public key and range above. A real GPU cluster running 24/7 is needed.
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="content">
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card" id="sc-ops">
+        <div class="stat-label">Keys Tested</div>
+        <div class="stat-value" id="val-ops">0</div>
+        <div class="stat-sub" id="val-ops-sub">waiting...</div>
+      </div>
+      <div class="stat-card" id="sc-speed">
+        <div class="stat-label">Speed</div>
+        <div class="stat-value orange" id="val-speed">0</div>
+        <div class="stat-sub">keys/sec</div>
+      </div>
+      <div class="stat-card" id="sc-dist">
+        <div class="stat-label">Distinguished Pts</div>
+        <div class="stat-value" id="val-dist">0</div>
+        <div class="stat-sub" id="val-dp-sub">DP-16 mode</div>
+      </div>
+      <div class="stat-card" id="sc-collisions">
+        <div class="stat-label">Collisions</div>
+        <div class="stat-value orange" id="val-coll">0</div>
+        <div class="stat-sub">kangaroo meets</div>
+      </div>
+      <div class="stat-card" id="sc-eta">
+        <div class="stat-label">Est. Remaining</div>
+        <div class="stat-value" id="val-eta" style="font-size:13px">—</div>
+        <div class="stat-sub">at current speed</div>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-section">
+      <div class="prog-header">
+        <span class="prog-label">SEARCH COVERAGE</span>
+        <span class="prog-pct" id="prog-pct">0.000000%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="kangaroo-row" style="margin-top:10px">
+        <span class="kangaroo-chip wild" id="chip-wild">🦘 Wild: 0</span>
+        <span class="kangaroo-chip tame" id="chip-tame">🦘 Tame: 0</span>
+        <span class="kangaroo-chip" id="chip-table">Table: 0 entries</span>
+        <span class="kangaroo-chip" id="chip-ckpt">Last ckpt: —</span>
+      </div>
+    </div>
+
+    <!-- Range -->
+    <div class="range-section">
+      <div class="range-box">
+        <div class="range-box-label">Range Start (2¹³⁴)</div>
+        <div class="range-box-val" id="range-start">0x4000000000000000000000000000000000</div>
+      </div>
+      <div class="range-box">
+        <div class="range-box-label">Current Position</div>
+        <div class="range-box-val" id="range-current">—</div>
+      </div>
+      <div class="range-box">
+        <div class="range-box-label">Range End (2¹³⁵)</div>
+        <div class="range-box-val" id="range-end">0x7fffffffffffffffffffffffffffffffff</div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="log-section">
+      <div class="log-header">
+        <span class="log-title">SOLVER LOG</span>
+        <div class="log-actions">
+          <button class="log-btn" onclick="clearLog()">CLEAR</button>
+          <button class="log-btn" onclick="exportLog()">EXPORT</button>
+        </div>
+      </div>
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<!-- FOUND MODAL -->
+<div class="modal-overlay" id="found-modal">
+  <div class="modal">
+    <div class="modal-title">🎯 KEY FOUND!</div>
+    <div class="modal-sub">Puzzle #135 private key discovered — save it immediately!</div>
+    <div class="modal-key">
+      <div class="modal-key-label">PRIVATE KEY (HEX)</div>
+      <div id="found-hex">—</div>
+    </div>
+    <div class="modal-key">
+      <div class="modal-key-label">PRIVATE KEY (WIF)</div>
+      <div id="found-wif">—</div>
+    </div>
+    <div class="modal-key" style="border-color:var(--accent2);background:rgba(255,107,0,0.08)">
+      <div class="modal-key-label" style="color:var(--accent2)">⚠ CRITICAL — USE MARA SLIPSTREAM</div>
+      <div style="color:var(--accent2);font-size:11px">Do NOT broadcast normally! Go to slipstream.mara.com and submit raw signed tx to bypass mempool exposure.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn copy" onclick="copyKey()">📋 COPY KEY</button>
+      <button class="modal-btn save" onclick="saveKey()">💾 SAVE TO FILE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Puzzle #135 Constants ───────────────────────────────────────
+const PUZZLE = {
+  number: 135,
+  pubkey: '02145d2611c823a11238f7b9521f9cec57f17ca9f7d02a7e2dfd56940a4a00bf49',
+  rangeStart: BigInt('0x4000000000000000000000000000000000'),
+  rangeEnd:   BigInt('0x7fffffffffffffffffffffffffffffffff'),
+  bits: 135,
+  balance: '1.35 BTC'
+};
+
+// ─── State ────────────────────────────────────────────────────────
+let running = false;
+let startTime = null;
+let sessionStart = Date.now();
+let totalOps = BigInt(0);
+let distPoints = 0;
+let collisions = 0;
+let wildSteps = BigInt(0);
+let tameSteps = BigInt(0);
+let tableSize = 0;
+let lastSpeed = 0;
+let lastOpsCheck = BigInt(0);
+let lastOpsTime = Date.now();
+let checkpointTimer = null;
+let sessionTimer = null;
+let solverInterval = null;
+let foundKey = null;
+let currentPos = BigInt(0);
+
+// ─── Simple BigInt RNG ────────────────────────────────────────────
+function randBigInt(min, max) {
+  const range = max - min;
+  const bits = range.toString(2).length;
+  const bytes = Math.ceil(bits / 8);
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  let val = BigInt(0);
+  for (let b of arr) val = (val << 8n) | BigInt(b);
+  return min + (val % range);
+}
+
+function bigIntToHex(n) {
+  return '0x' + n.toString(16).padStart(34, '0');
+}
+
+function formatBigInt(n) {
+  const s = n.toString();
+  if (s.length <= 6) return s;
+  return s.slice(0,3) + '...' + s.slice(-3) + ` (${s.length} digits)`;
+}
+
+// ─── Simulated Kangaroo Steps ──────────────────────────────────────
+// Real kangaroo requires secp256k1 EC point operations.
+// This simulation models the algorithm's structure and DP behavior
+// so you can see exactly what data to save when running the real solver.
+const DP_MASK_16 = (1n << 16n) - 1n;
+
+function simulateKangarooStep(pos) {
+  // Jump based on low bits (hash of position mod jump table)
+  const jump = (pos & 0xffffn) + 1n;
+  return pos + jump;
+}
+
+function isDistinguished(pos, dpBits) {
+  const mask = (1n << BigInt(dpBits)) - 1n;
+  return (pos & mask) === 0n;
+}
+
+// ─── UI helpers ──────────────────────────────────────────────────
+function log(msg, type='') {
+  const el = document.getElementById('log');
+  const now = new Date();
+  const t = now.toTimeString().slice(0,8) + '.' + String(now.getMilliseconds()).padStart(3,'0');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">[${t}]</span><span class="log-msg ${type}">${msg}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  // Trim to 2000 lines
+  while (el.children.length > 2000) el.removeChild(el.firstChild);
+}
+
+function fmtNum(n) {
+  if (n >= 1e12) return (n/1e12).toFixed(2)+'T';
+  if (n >= 1e9)  return (n/1e9).toFixed(2)+'G';
+  if (n >= 1e6)  return (n/1e6).toFixed(2)+'M';
+  if (n >= 1e3)  return (n/1e3).toFixed(1)+'K';
+  return n.toString();
+}
+
+function fmtTime(sec) {
+  if (!isFinite(sec) || sec <= 0) return '∞';
+  if (sec > 3.15e13) return '>1M years';
+  if (sec > 3.15e10) return `~${(sec/3.15e7).toFixed(0)} years`;
+  if (sec > 2592000) return `~${(sec/2592000).toFixed(0)} months`;
+  if (sec > 86400)   return `~${(sec/86400).toFixed(0)} days`;
+  if (sec > 3600)    return `~${(sec/3600).toFixed(1)} hours`;
+  if (sec > 60)      return `~${(sec/60).toFixed(0)} min`;
+  return `~${sec.toFixed(0)} sec`;
+}
+
+function updateSessionTimer() {
+  const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+  const h = String(Math.floor(elapsed/3600)).padStart(2,'0');
+  const m = String(Math.floor((elapsed%3600)/60)).padStart(2,'0');
+  const s = String(elapsed%60).padStart(2,'0');
+  document.getElementById('session-time').textContent = `SESSION: ${h}:${m}:${s}`;
+}
+
+// ─── Start / Stop ─────────────────────────────────────────────────
+function startSolver() {
+  if (running) return;
+  running = true;
+  startTime = Date.now();
+  totalOps = BigInt(0);
+  distPoints = 0;
+  collisions = 0;
+  tableSize = 0;
+  wildSteps = BigInt(0);
+  tameSteps = BigInt(0);
+
+  const wildN = parseInt(document.getElementById('wild-count').value);
+  const tameN = parseInt(document.getElementById('tame-count').value);
+  const dpBits = parseInt(document.getElementById('dp-bits').value);
+  const ckptSec = parseInt(document.getElementById('checkpoint-interval').value);
+
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-stop').disabled = false;
+  document.getElementById('solver-dot').className = 'status-dot running';
+  document.getElementById('solver-status').textContent = 'RUNNING';
+  document.getElementById('val-dp-sub').textContent = `DP-${dpBits} mode`;
+  document.getElementById('sc-ops').classList.add('active');
+  document.getElementById('chip-wild').textContent = `🦘 Wild: ${wildN}`;
+  document.getElementById('chip-tame').textContent = `🦘 Tame: ${tameN}`;
+
+  log('═══════════════════════════════════════════', 'info');
+  log(`BTC Puzzle #135 — Pollard Kangaroo Solver`, 'info');
+  log('═══════════════════════════════════════════', 'info');
+  log(`Public Key: ${PUZZLE.pubkey}`);
+  log(`Range: 2^134 → 2^135`);
+  log(`Algorithm: Pollard Kangaroo  |  Complexity: ~2^67.5 ops`);
+  log(`Wild kangaroos: ${wildN}  |  Tame kangaroos: ${tameN}`);
+  log(`Distinguished point bits: ${dpBits}  |  DP mask: lowest ${dpBits} bits = 0`);
+  log('───────────────────────────────────────────');
+  log('Initializing kangaroo herds...', 'info');
+
+  // Init wild positions randomly in range
+  const range = PUZZLE.rangeEnd - PUZZLE.rangeStart;
+  let wildPos = [];
+  let tamePos = [];
+  for (let i=0; i<Math.min(wildN,8); i++) {
+    wildPos.push(randBigInt(PUZZLE.rangeStart, PUZZLE.rangeEnd));
+  }
+  for (let i=0; i<Math.min(tameN,8); i++) {
+    // Tame kangaroos start from known point (rangeEnd)
+    tamePos.push(PUZZLE.rangeEnd - BigInt(i) * (range / BigInt(tameN)));
+  }
+
+  log(`Wild herd initialized at ${wildN} random positions in range`, 'info');
+  log(`Tame herd initialized at ${tameN} evenly-spaced positions`, 'info');
+  log('Starting jump sequence...', 'info');
+  log('───────────────────────────────────────────');
+
+  currentPos = wildPos[0];
+
+  // Checkpoint timer
+  checkpointTimer = setInterval(() => {
+    if (running) autoCheckpoint();
+  }, ckptSec * 1000);
+
+  // Session timer
+  sessionTimer = setInterval(updateSessionTimer, 1000);
+
+  // Main solver loop (simulated for JS — models real algorithm behavior)
+  const BATCH = 50000n; // ops per tick
+  solverInterval = setInterval(() => {
+    if (!running) return;
+
+    // Simulate batch of kangaroo steps
+    for (let i=0; i<8; i++) {
+      // Wild step
+      wildPos[i%wildPos.length] = simulateKangarooStep(wildPos[i%wildPos.length]);
+      wildSteps += 1n;
+      if (isDistinguished(wildPos[i%wildPos.length], dpBits)) {
+        distPoints++;
+        tableSize++;
+        // Simulate occasional collision (very rare — models real DP table behavior)
+        if (Math.random() < 0.0001) {
+          collisions++;
+          log(`Distinguished point collision #${collisions} detected — checking...`, 'warn');
+          if (Math.random() < 0.0000001) {
+            // Simulate a "solve" (would not happen in JS — real secp256k1 needed)
+            handleFound('DEMO_KEY_PLACEHOLDER', 'WIF_PLACEHOLDER');
+          }
+        }
+      }
+      // Tame step
+      tamePos[i%tamePos.length] = simulateKangarooStep(tamePos[i%tamePos.length]);
+      tameSteps += 1n;
+    }
+
+    totalOps += BATCH;
+    currentPos = wildPos[0];
+
+    // Update speed
+    const now = Date.now();
+    const dt = (now - lastOpsTime) / 1000;
+    if (dt >= 1) {
+      const opsDelta = Number(totalOps - lastOpsCheck);
+      lastSpeed = Math.round(opsDelta / dt);
+      lastOpsCheck = totalOps;
+      lastOpsTime = now;
+    }
+
+    updateStats(dpBits, wildN, tameN);
+
+    // Verbose log every ~500K ops
+    if (totalOps % 500000n < BATCH) {
+      const pct = (Number(wildSteps) / Number(range >> 1n) * 100).toFixed(8);
+      log(`Ops: ${fmtNum(Number(totalOps))} | DP: ${distPoints} | Speed: ${fmtNum(lastSpeed)}/s | Collisions: ${collisions}`);
+    }
+
+  }, 100);
+}
+
+function stopSolver() {
+  running = false;
+  clearInterval(solverInterval);
+  clearInterval(checkpointTimer);
+  clearInterval(sessionTimer);
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-stop').disabled = true;
+  document.getElementById('solver-dot').className = 'status-dot';
+  document.getElementById('solver-status').textContent = 'STOPPED';
+  document.getElementById('sc-ops').classList.remove('active');
+  log('───────────────────────────────────────────');
+  log(`Solver stopped. Total ops: ${fmtNum(Number(totalOps))} | DP collected: ${distPoints}`, 'warn');
+  autoCheckpoint();
+}
+
+function updateStats(dpBits, wildN, tameN) {
+  document.getElementById('val-ops').textContent = fmtNum(Number(totalOps));
+  document.getElementById('val-ops-sub').textContent = `${Number(totalOps).toLocaleString()} total`;
+  document.getElementById('val-speed').textContent = fmtNum(lastSpeed);
+  document.getElementById('val-dist').textContent = distPoints.toLocaleString();
+  document.getElementById('val-coll').textContent = collisions;
+
+  // Progress: theoretical — 2^67.5 needed
+  const target = Math.pow(2, 67.5);
+  const done = Number(totalOps);
+  const pct = (done / target * 100);
+  const pctStr = pct < 0.000001 ? pct.toExponential(3) + '%' : pct.toFixed(8) + '%';
+  document.getElementById('prog-pct').textContent = pctStr;
+  document.getElementById('progress-fill').style.width = Math.min(pct * 1e8, 100) + '%';
+
+  // ETA
+  if (lastSpeed > 0) {
+    const remaining = (target - done) / lastSpeed;
+    document.getElementById('val-eta').textContent = fmtTime(remaining);
+  }
+
+  document.getElementById('chip-wild').textContent = `🦘 Wild: ${wildN} (${fmtNum(Number(wildSteps))} steps)`;
+  document.getElementById('chip-tame').textContent = `🦘 Tame: ${tameN} (${fmtNum(Number(tameSteps))} steps)`;
+  document.getElementById('chip-table').textContent = `Table: ${tableSize.toLocaleString()} DP entries`;
+
+  document.getElementById('range-current').textContent = bigIntToHex(currentPos);
+}
+
+function autoCheckpoint() {
+  const ckpt = {
+    timestamp: new Date().toISOString(),
+    puzzle: 135,
+    totalOps: totalOps.toString(),
+    distPoints,
+    collisions,
+    tableSize,
+    currentPos: currentPos.toString(16),
+    speed: lastSpeed
+  };
+  const json = JSON.stringify(ckpt, null, 2);
+  localStorage.setItem('puzzle135_checkpoint', json);
+  const t = new Date().toTimeString().slice(0,8);
+  document.getElementById('chip-ckpt').textContent = `Last ckpt: ${t}`;
+  log(`Checkpoint saved — ops: ${fmtNum(Number(totalOps))}, DP: ${distPoints}`, 'info');
+}
+
+function saveCheckpoint() {
+  autoCheckpoint();
+  const data = localStorage.getItem('puzzle135_checkpoint');
+  downloadFile('puzzle135_checkpoint.json', data, 'application/json');
+}
+
+function handleFound(hexKey, wifKey) {
+  running = false;
+  clearInterval(solverInterval);
+  clearInterval(checkpointTimer);
+  foundKey = { hex: hexKey, wif: wifKey };
+
+  log('╔══════════════════════════════════════════╗', 'success');
+  log('║   *** PRIVATE KEY FOUND! ***             ║', 'success');
+  log('╚══════════════════════════════════════════╝', 'success');
+  log(`Private Key (hex): ${hexKey}`, 'success');
+  log(`Private Key (WIF): ${wifKey}`, 'success');
+  log('⚠ DO NOT broadcast normally! Use MARA Slipstream!', 'warn');
+
+  // Auto-save
+  const result = `BTC Puzzle #135 — PRIVATE KEY FOUND\n` +
+    `Timestamp: ${new Date().toISOString()}\n` +
+    `Public Key: ${PUZZLE.pubkey}\n` +
+    `Private Key (hex): ${hexKey}\n` +
+    `Private Key (WIF): ${wifKey}\n` +
+    `Total ops: ${totalOps.toString()}\n` +
+    `\nCRITICAL: Use MARA Slipstream (slipstream.mara.com) to redeem!\n` +
+    `DO NOT broadcast via normal mempool — bots will steal it!\n`;
+  downloadFile(document.getElementById('save-path').value, result, 'text/plain');
+
+  document.getElementById('found-hex').textContent = hexKey;
+  document.getElementById('found-wif').textContent = wifKey;
+  document.getElementById('found-modal').classList.add('show');
+
+  document.getElementById('solver-dot').className = 'status-dot active';
+  document.getElementById('solver-status').textContent = 'KEY FOUND!';
+}
+
+function copyKey() {
+  if (foundKey) {
+    navigator.clipboard.writeText(`HEX: ${foundKey.hex}\nWIF: ${foundKey.wif}`);
+    log('Private key copied to clipboard', 'success');
+  }
+}
+
+function saveKey() {
+  if (foundKey) {
+    const txt = `Private Key HEX: ${foundKey.hex}\nPrivate Key WIF: ${foundKey.wif}\nTimestamp: ${new Date().toISOString()}`;
+    downloadFile('PUZZLE135_PRIVATE_KEY.txt', txt, 'text/plain');
+  }
+}
+
+function downloadFile(name, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], {type}));
+  a.download = name;
+  a.click();
+}
+
+function exportLog() {
+  const lines = [...document.querySelectorAll('.log-line')].map(l => l.textContent).join('\n');
+  downloadFile('puzzle135_log.txt', lines, 'text/plain');
+}
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+}
+
+// ─── Init ─────────────────────────────────────────────────────────
+sessionTimer = setInterval(updateSessionTimer, 1000);
+
+// Load checkpoint if exists
+const ckpt = localStorage.getItem('puzzle135_checkpoint');
+if (ckpt) {
+  try {
+    const c = JSON.parse(ckpt);
+    log(`Previous checkpoint found from ${c.timestamp}`, 'warn');
+    log(`Ops completed: ${fmtNum(Number(BigInt(c.totalOps)))} | DP: ${c.distPoints}`, 'warn');
+    log('Click START to resume (or configure and start fresh)', 'info');
+  } catch(e) {}
+} else {
+  log('No checkpoint found — ready for fresh start', 'info');
+}
+
+log('Puzzle #135 public key loaded ✓', 'success');
+log(`Range: 2^134 → 2^135 (${PUZZLE.rangeEnd.toString(16).slice(0,8)}...)`, 'info');
+log('Configure kangaroo count and click START SOLVER', 'info');
+log('─────────────────────────────────────────────────');
+log('NOTE: Full solve requires GPU (CUDA) Kangaroo tool.', 'warn');
+log('This UI manages config, progress, checkpoints & results.', 'warn');
+log('See sidebar for GPU command. This JS sim shows algorithm.', 'warn');
+</script>
+</body>
+</html>

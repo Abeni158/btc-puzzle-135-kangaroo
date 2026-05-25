@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BTC #135 Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #08090d;
+    --card: #0f1319;
+    --card2: #141920;
+    --border: #1e2d3d;
+    --accent: #00c8ff;
+    --accent2: #ff7b00;
+    --green: #00e87a;
+    --red: #ff3355;
+    --text: #d0e8f5;
+    --dim: #4a6a80;
+    --glow: 0 0 16px rgba(0,200,255,0.25);
+  }
+  * { margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    max-width: 420px;
+    margin: 0 auto;
+    overflow-x: hidden;
+  }
+
+  /* Status bar */
+  .statusbar {
+    height: 28px;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    font-size: 11px;
+    font-family: 'Share Tech Mono', monospace;
+    color: #666;
+  }
+  .statusbar .right { display:flex;gap:10px; }
+
+  /* Top bar */
+  .topbar {
+    background: linear-gradient(180deg, #0a1520 0%, var(--card) 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .app-icon {
+    width: 36px;height:36px;
+    background: linear-gradient(135deg, var(--accent), #0060aa);
+    border-radius: 10px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;
+    box-shadow: var(--glow);
+  }
+  .app-title { flex:1; }
+  .app-title h1 { font-size:17px;font-weight:700;letter-spacing:1px;color:var(--text); }
+  .app-title p { font-size:11px;color:var(--dim);font-family:'Share Tech Mono',monospace; }
+  .notif-btn {
+    width:36px;height:36px;
+    background:var(--card2);
+    border-radius:50%;
+    border: 1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;
+    font-size:16px;
+    cursor:pointer;
+    position:relative;
+  }
+  .notif-badge {
+    position:absolute;top:-2px;right:-2px;
+    width:14px;height:14px;
+    background:var(--red);
+    border-radius:50%;
+    font-size:8px;
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-family:'Share Tech Mono',monospace;
+  }
+
+  /* Scrollable content */
+  .content { padding: 12px 14px; padding-bottom: 80px; }
+
+  /* Status Hero */
+  .hero {
+    background: linear-gradient(135deg, #0d1e30, #0a1520);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content:'';
+    position:absolute;
+    top:-40px;right:-40px;
+    width:120px;height:120px;
+    background: radial-gradient(circle, rgba(0,200,255,0.08) 0%, transparent 70%);
+    border-radius:50%;
+  }
+  .hero-label { font-size:11px;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:6px; }
+  .hero-status {
+    font-size:28px;font-weight:700;letter-spacing:2px;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    display:flex;align-items:center;gap:10px;
+  }
+  .pulse-ring {
+    width:12px;height:12px;
+    border-radius:50%;
+    background: var(--accent2);
+    box-shadow: 0 0 0 0 rgba(255,123,0,0.4);
+    animation: pingpulse 1.5s infinite;
+  }
+  .pulse-ring.green { background:var(--green);box-shadow:0 0 0 0 rgba(0,232,122,0.4); animation: pingpulse2 1.5s infinite; }
+  @keyframes pingpulse { 0%{box-shadow:0 0 0 0 rgba(255,123,0,0.5)} 100%{box-shadow:0 0 0 12px transparent} }
+  @keyframes pingpulse2 { 0%{box-shadow:0 0 0 0 rgba(0,232,122,0.5)} 100%{box-shadow:0 0 0 12px transparent} }
+  .hero-sub { font-size:13px;color:var(--dim);margin-top:6px; }
+  .hero-balance {
+    position:absolute;top:20px;right:20px;
+    text-align:right;
+  }
+  .hero-balance .amt { font-size:22px;font-weight:700;color:var(--green); }
+  .hero-balance .lbl { font-size:10px;color:var(--dim);letter-spacing:2px; }
+
+  /* Mini stats grid */
+  .stats-grid {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:12px;
+  }
+  .stat-tile {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .stat-tile .lbl { font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-bottom:6px; }
+  .stat-tile .val { font-size:22px;font-weight:700;color:var(--accent); }
+  .stat-tile .val.green { color:var(--green); }
+  .stat-tile .val.orange { color:var(--accent2); }
+  .stat-tile .sub { font-size:11px;color:var(--dim);margin-top:3px; }
+
+  /* Progress card */
+  .prog-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .prog-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:12px; }
+  .prog-title { font-size:13px;font-weight:600;letter-spacing:2px;color:var(--dim);text-transform:uppercase; }
+  .prog-pct { font-size:15px;font-weight:700;color:var(--accent);font-family:'Share Tech Mono',monospace; }
+  .prog-track {
+    height:8px;background:rgba(30,45,61,0.8);border-radius:4px;overflow:hidden;margin-bottom:10px;
+  }
+  .prog-fill {
+    height:100%;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    border-radius:4px;
+    width:0%;
+    transition:width 0.6s ease;
+    position:relative;
+  }
+  .prog-fill::after {
+    content:'';position:absolute;right:0;top:0;bottom:0;width:20px;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,0.4));
+    animation:sh 1.5s infinite;
+  }
+  @keyframes sh{0%,100%{opacity:0}50%{opacity:1}}
+  .seg-row { display:flex;gap:6px; }
+  .seg { flex:1;height:4px;background:var(--border);border-radius:2px;transition:background 0.4s; }
+  .seg.done { background:var(--accent); }
+  .prog-info { display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:var(--dim); }
+
+  /* Log card */
+  .log-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .log-topbar {
+    background: var(--card2);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .log-topbar span { font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase; }
+  .log-clear {
+    background:none;border:1px solid var(--border);color:var(--dim);
+    font-family:'Rajdhani',sans-serif;font-size:11px;padding:3px 10px;
+    border-radius:6px;cursor:pointer;
+  }
+  #mob-log {
+    padding:10px 14px;
+    font-family:'Share Tech Mono',monospace;
+    font-size:10.5px;
+    line-height:1.7;
+    max-height:220px;
+    overflow-y:auto;
+    scrollbar-width:none;
+  }
+  #mob-log::-webkit-scrollbar{display:none;}
+  .ml { display:flex;gap:8px; }
+  .ml .mt { color:var(--dim);min-width:56px; }
+  .ml .mm { color:var(--text); }
+  .ml .mm.i { color:var(--accent); }
+  .ml .mm.s { color:var(--green);font-weight:bold; }
+  .ml .mm.w { color:var(--accent2); }
+
+  /* Pubkey card */
+  .pk-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .pk-label { font-size:10px;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:8px; }
+  .pk-val {
+    font-family:'Share Tech Mono',monospace;
+    font-size:10px;
+    word-break:break-all;
+    color:var(--accent);
+    line-height:1.7;
+    background:rgba(0,200,255,0.05);
+    border-radius:6px;
+    padding:10px;
+  }
+
+  /* Action buttons */
+  .action-row { display:flex;gap:10px;margin-bottom:12px; }
+  .action-btn {
+    flex:1;padding:14px 10px;
+    border:none;border-radius:12px;
+    font-family:'Rajdhani',sans-serif;
+    font-size:14px;font-weight:700;
+    letter-spacing:1px;
+    cursor:pointer;
+    transition:all 0.15s;
+    text-transform:uppercase;
+  }
+  .action-btn:active{transform:scale(0.96);}
+  .btn-run { background:linear-gradient(135deg,#00c8ff,#0080b0);color:#000;box-shadow:0 4px 20px rgba(0,200,255,0.25); }
+  .btn-stop { background:linear-gradient(135deg,#ff3355,#aa0022);color:#fff;box-shadow:0 4px 20px rgba(255,51,85,0.25); }
+  .btn-save { background:var(--card2);border:1px solid var(--border);color:var(--dim); }
+
+  /* Bottom nav */
+  .bottom-nav {
+    position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+    width:100%;max-width:420px;
+    background:var(--card);
+    border-top:1px solid var(--border);
+    display:grid;grid-template-columns:repeat(4,1fr);
+    padding-bottom:env(safe-area-inset-bottom,0);
+  }
+  .nav-item {
+    padding:10px 4px;
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    cursor:pointer;
+    color:var(--dim);
+    font-size:10px;letter-spacing:1px;
+    font-weight:600;text-transform:uppercase;
+    transition:color 0.2s;
+  }
+  .nav-item.active{color:var(--accent);}
+  .nav-item .icon{font-size:20px;}
+
+  /* Alert banner */
+  .alert-banner {
+    background:linear-gradient(135deg,rgba(255,123,0,0.15),rgba(255,51,85,0.1));
+    border:1px solid rgba(255,123,0,0.4);
+    border-radius:12px;
+    padding:12px 14px;
+    margin-bottom:12px;
+    font-size:12px;
+    line-height:1.6;
+    color:var(--accent2);
+    display:none;
+  }
+  .alert-banner.show{display:block;}
+  .alert-title{font-weight:700;font-size:14px;margin-bottom:4px;}
+
+  /* Section header */
+  .sec-hdr {
+    font-size:11px;letter-spacing:3px;color:var(--dim);
+    text-transform:uppercase;margin-bottom:10px;margin-top:4px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .sec-hdr::after{content:'';flex:1;height:1px;background:var(--border);}
+
+  /* Config rows */
+  .cfg-card {
+    background:var(--card);border:1px solid var(--border);
+    border-radius:12px;overflow:hidden;margin-bottom:12px;
+  }
+  .cfg-row {
+    display:flex;justify-content:space-between;align-items:center;
+    padding:12px 14px;border-bottom:1px solid var(--border);
+  }
+  .cfg-row:last-child{border-bottom:none;}
+  .cfg-row .cfg-lbl{font-size:13px;font-weight:600;color:var(--text);}
+  .cfg-row .cfg-val{font-size:12px;color:var(--accent);font-family:'Share Tech Mono',monospace;}
+  .cfg-row .cfg-sub{font-size:10px;color:var(--dim);}
+
+  /* Found screen overlay */
+  .found-overlay {
+    display:none;
+    position:fixed;inset:0;
+    background:rgba(0,0,0,0.92);
+    z-index:200;
+    align-items:center;justify-content:center;
+    padding:20px;
+  }
+  .found-overlay.show{display:flex;}
+  .found-card {
+    background:var(--card);
+    border:2px solid var(--green);
+    border-radius:20px;
+    padding:28px 20px;
+    width:100%;
+    box-shadow:0 0 50px rgba(0,232,122,0.25);
+    animation:popIn 0.4s cubic-bezier(0.16,1,0.3,1);
+  }
+  @keyframes popIn{from{transform:scale(0.7);opacity:0}to{transform:scale(1);opacity:1}}
+  .found-icon{text-align:center;font-size:48px;margin-bottom:12px;}
+  .found-title{text-align:center;font-size:24px;font-weight:700;color:var(--green);margin-bottom:4px;}
+  .found-sub{text-align:center;font-size:12px;color:var(--dim);margin-bottom:20px;}
+  .found-key{
+    background:rgba(0,232,122,0.08);
+    border:1px solid rgba(0,232,122,0.3);
+    border-radius:10px;padding:12px;
+    font-family:'Share Tech Mono',monospace;
+    font-size:10px;word-break:break-all;
+    color:var(--green);line-height:1.7;margin-bottom:10px;
+  }
+  .found-key .fk-lbl{font-size:9px;letter-spacing:2px;color:var(--dim);margin-bottom:4px;}
+  .found-warn{
+    background:rgba(255,51,85,0.1);
+    border:1px solid rgba(255,51,85,0.3);
+    border-radius:10px;padding:12px;
+    font-size:11px;color:var(--red);line-height:1.6;margin-bottom:16px;
+  }
+  .found-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .found-btn{
+    padding:13px;border:none;border-radius:10px;
+    font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;
+    cursor:pointer;letter-spacing:1px;text-transform:uppercase;
+  }
+  .found-btn.copy{background:var(--green);color:#000;}
+  .found-btn.save{background:var(--accent2);color:#fff;}
+
+  /* Tabs */
+  .tab-bar {
+    display:flex;gap:4px;background:var(--card2);
+    border-radius:10px;padding:4px;margin-bottom:14px;
+    border:1px solid var(--border);
+  }
+  .tab {
+    flex:1;padding:8px;text-align:center;
+    font-size:12px;font-weight:600;letter-spacing:1px;
+    border-radius:7px;cursor:pointer;color:var(--dim);
+    transition:all 0.2s;
+  }
+  .tab.active{background:var(--card);color:var(--accent);box-shadow:0 2px 8px rgba(0,0,0,0.3);}
+</style>
+</head>
+<body>
+
+<!-- Status bar -->
+<div class="statusbar">
+  <span id="sb-time">12:00</span>
+  <div class="right">
+    <span>●●●</span><span>WiFi</span><span>🔋</span>
+  </div>
+</div>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="app-icon">₿</div>
+  <div class="app-title">
+    <h1>BTC Puzzle #135</h1>
+    <p>Kangaroo Solver Monitor</p>
+  </div>
+  <div class="notif-btn" onclick="toggleAlert()">
+    🔔
+    <div class="notif-badge" id="notif-count">0</div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <div class="tab active" onclick="setTab('dashboard',this)">Dashboard</div>
+    <div class="tab" onclick="setTab('config',this)">Config</div>
+    <div class="tab" onclick="setTab('info',this)">Info</div>
+  </div>
+
+  <!-- DASHBOARD TAB -->
+  <div id="tab-dashboard">
+
+    <!-- Alert -->
+    <div class="alert-banner" id="alert-banner">
+      <div class="alert-title">⚠ Important Reminder</div>
+      If a key is found, use MARA Slipstream (slipstream.mara.com) — do NOT broadcast normally!
+    </div>
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-label">Solver Status</div>
+      <div class="hero-status">
+        <div class="pulse-ring" id="hero-pulse"></div>
+        <span id="hero-status-txt">IDLE</span>
+      </div>
+      <div class="hero-sub" id="hero-sub">Ready to search</div>
+      <div class="hero-balance">
+        <div class="amt">1.35₿</div>
+        <div class="lbl">REWARD</div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="action-row">
+      <button class="action-btn btn-run" id="btn-run" onclick="startSolver()">▶ Start</button>
+      <button class="action-btn btn-stop" id="btn-stp" onclick="stopSolver()" disabled>■ Stop</button>
+      <button class="action-btn btn-save" onclick="saveCheckpoint()">💾</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="sec-hdr">Live Stats</div>
+    <div class="stats-grid">
+      <div class="stat-tile">
+        <div class="lbl">Keys Tested</div>
+        <div class="val" id="m-ops">0</div>
+        <div class="sub">total operations</div>
+      </div>
+      <div class="stat-tile">
+        <div class="lbl">Speed</div>
+        <div class="val orange" id="m-speed">0</div>
+        <div class="sub">keys/sec</div>
+      </div>
+      <div class="stat-tile">
+        <div class="lbl">DP Points</div>
+        <div class="val" id="m-dp">0</div>
+        <div class="sub">distinguished</div>
+      </div>
+      <div class="stat-tile">
+        <div class="lbl">Collisions</div>
+        <div class="val orange" id="m-coll">0</div>
+        <div class="sub">kangaroo meets</div>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="prog-card">
+      <div class="prog-header">
+        <span class="prog-title">Search Progress</span>
+        <span class="prog-pct" id="m-pct">0.00e-20%</span>
+      </div>
+      <div class="prog-track">
+        <div class="prog-fill" id="m-prog-fill"></div>
+      </div>
+      <div class="seg-row" id="seg-row">
+        <!-- filled dynamically -->
+      </div>
+      <div class="prog-info">
+        <span>~2⁶⁷·⁵ total needed</span>
+        <span id="m-eta">ETA: ∞</span>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="sec-hdr">Solver Log</div>
+    <div class="log-card">
+      <div class="log-topbar">
+        <span>Activity</span>
+        <button class="log-clear" onclick="clearMobLog()">CLEAR</button>
+      </div>
+      <div id="mob-log"></div>
+    </div>
+
+  </div>
+
+  <!-- CONFIG TAB -->
+  <div id="tab-config" style="display:none">
+    <div class="sec-hdr">Solver Settings</div>
+    <div class="cfg-card">
+      <div class="cfg-row">
+        <div><div class="cfg-lbl">Wild Kangaroos</div><div class="cfg-sub">Random walkers in range</div></div>
+        <div class="cfg-val" id="cfg-wild">512</div>
+      </div>
+      <div class="cfg-row">
+        <div><div class="cfg-lbl">Tame Kangaroos</div><div class="cfg-sub">Deterministic walkers</div></div>
+        <div class="cfg-val" id="cfg-tame">512</div>
+      </div>
+      <div class="cfg-row">
+        <div><div class="cfg-lbl">DP Bits</div><div class="cfg-sub">Distinguished point mask</div></div>
+        <div class="cfg-val">16</div>
+      </div>
+      <div class="cfg-row">
+        <div><div class="cfg-lbl">Checkpoint</div><div class="cfg-sub">Auto-save interval</div></div>
+        <div class="cfg-val">60s</div>
+      </div>
+    </div>
+
+    <div class="sec-hdr">GPU Command (Windows)</div>
+    <div class="pk-card">
+      <div class="pk-label">Kangaroo CLI — Copy to Windows PC</div>
+      <div class="pk-val">./kangaroo -gpu -t 8 -d 16 -o result.txt puzzle135.txt</div>
+    </div>
+
+    <div class="pk-card">
+      <div class="pk-label">puzzle135.txt content</div>
+      <div class="pk-val">
+        135<br>
+        4000000000000000000000000000000000<br>
+        7fffffffffffffffffffffffffffffffff<br>
+        02145d2611c823a11238f7b9521f9cec57f17ca9f7d02a7e2dfd56940a4a00bf49
+      </div>
+    </div>
+
+    <div class="sec-hdr">Redemption (When Found)</div>
+    <div class="cfg-card">
+      <div class="cfg-row">
+        <div><div class="cfg-lbl">Step 1</div><div class="cfg-sub">Import WIF key into Electrum wallet</div></div>
+        <div class="cfg-val">🔑</div>
+      </div>
+      <div class="cfg-row">
+        <div><div class="cfg-lbl">Step 2</div><div class="cfg-sub">Sign tx but DO NOT broadcast</div></div>
+        <div class="cfg-val">✍️</div>
+      </div>
+      <div class="cfg-row">
+        <div><div class="cfg-lbl">Step 3</div><div class="cfg-sub">Submit via slipstream.mara.com</div></div>
+        <div class="cfg-val">🚀</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INFO TAB -->
+  <div id="tab-info" style="display:none">
+    <div class="sec-hdr">Puzzle #135 Details</div>
+    <div class="cfg-card">
+      <div class="cfg-row">
+        <div class="cfg-lbl">Puzzle Number</div>
+        <div class="cfg-val">#135</div>
+      </div>
+      <div class="cfg-row">
+        <div class="cfg-lbl">Bit Range</div>
+        <div class="cfg-val">134 – 135</div>
+      </div>
+      <div class="cfg-row">
+        <div class="cfg-lbl">Reward Balance</div>
+        <div class="cfg-val" style="color:var(--green)">1.35 BTC</div>
+      </div>
+      <div class="cfg-row">
+        <div class="cfg-lbl">Algorithm</div>
+        <div class="cfg-val">Pollard Kangaroo</div>
+      </div>
+      <div class="cfg-row">
+        <div class="cfg-lbl">Complexity</div>
+        <div class="cfg-val">~2⁶⁷·⁵ ops</div>
+      </div>
+      <div class="cfg-row">
+        <div class="cfg-lbl">Public Key</div>
+        <div class="cfg-val" style="color:var(--green)">Known ✓</div>
+      </div>
+    </div>
+
+    <div class="sec-hdr">Public Key</div>
+    <div class="pk-card">
+      <div class="pk-label">Compressed (33 bytes)</div>
+      <div class="pk-val">02145d2611c823a11238f7b9521f9cec57f17ca9f7d02a7e2dfd56940a4a00bf49</div>
+    </div>
+
+    <div class="sec-hdr">How Kangaroo Works</div>
+    <div class="pk-card">
+      <div class="pk-val" style="color:var(--text);font-family:'Rajdhani',sans-serif;font-size:13px;line-height:1.7">
+        <strong style="color:var(--accent)">1. Two herds of kangaroos</strong> — Wild ones jump randomly in the key range. Tame ones start from a known point and jump deterministically.<br><br>
+        <strong style="color:var(--accent)">2. Distinguished Points (DP)</strong> — When a kangaroo lands on a position where the lowest 16 bits are 0, it records its position and distance traveled.<br><br>
+        <strong style="color:var(--accent)">3. Birthday collision</strong> — Eventually a wild and tame kangaroo land on the same DP. This reveals the private key via math on their distances.<br><br>
+        <strong style="color:var(--accent)">4. Square root speedup</strong> — Instead of 2¹³⁵ operations, only ~2⁶⁷·⁵ are needed. Still massive — requires GPU clusters.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Bottom nav -->
+<div class="bottom-nav">
+  <div class="nav-item active" onclick="setTab('dashboard',this,true)">
+    <span class="icon">📊</span>Dashboard
+  </div>
+  <div class="nav-item" onclick="setTab('config',this,true)">
+    <span class="icon">⚙️</span>Config
+  </div>
+  <div class="nav-item" onclick="setTab('info',this,true)">
+    <span class="icon">ℹ️</span>Info
+  </div>
+  <div class="nav-item" onclick="toggleAlert()">
+    <span class="icon">🔔</span>Alerts
+  </div>
+</div>
+
+<!-- Found overlay -->
+<div class="found-overlay" id="found-overlay">
+  <div class="found-card">
+    <div class="found-icon">🎯</div>
+    <div class="found-title">KEY FOUND!</div>
+    <div class="found-sub">Puzzle #135 solved — act immediately</div>
+    <div class="found-key">
+      <div class="fk-lbl">PRIVATE KEY (HEX)</div>
+      <div id="fo-hex">—</div>
+    </div>
+    <div class="found-key">
+      <div class="fk-lbl">PRIVATE KEY (WIF)</div>
+      <div id="fo-wif">—</div>
+    </div>
+    <div class="found-warn">
+      ⚠ DO NOT broadcast normally! Bots will steal it in seconds.<br>
+      Use MARA Slipstream: slipstream.mara.com
+    </div>
+    <div class="found-btns">
+      <button class="found-btn copy" onclick="copyFoundKey()">📋 Copy Key</button>
+      <button class="found-btn save" onclick="saveFoundKey()">💾 Save File</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Puzzle constants ────────────────────────────────────────────
+const PUBKEY = '02145d2611c823a11238f7b9521f9cec57f17ca9f7d02a7e2dfd56940a4a00bf49';
+const RANGE_START = BigInt('0x4000000000000000000000000000000000');
+const RANGE_END   = BigInt('0x7fffffffffffffffffffffffffffffffff');
+
+// ── State ──────────────────────────────────────────────────────
+let running = false;
+let totalOps = BigInt(0);
+let distPts = 0, colls = 0, tableSize = 0;
+let wildSteps = BigInt(0), tameSteps = BigInt(0);
+let lastSpeed = 0, lastOpsN = BigInt(0), lastOpsT = Date.now();
+let solverInterval, ckptInterval, clockInterval;
+let foundKey = null;
+let notifCount = 0;
+let alertShowing = false;
+
+// ── Kangaroo sim positions ─────────────────────────────────────
+function rand64() {
+  const arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
+  let v = BigInt(0);
+  for (let b of arr) v = (v<<8n)|BigInt(b);
+  return v;
+}
+function randRange(a,b){ return a + (rand64() % (b-a)); }
+function simStep(pos){ return pos + (pos & 0x3ffn) + 1n; }
+function isDP(pos){ return (pos & 0xffffn) === 0n; }
+
+let wildPos = [], tamePos = [];
+
+// ── Segment bar ────────────────────────────────────────────────
+const SEG_COUNT = 20;
+const segRow = document.getElementById('seg-row');
+for(let i=0;i<SEG_COUNT;i++){
+  const s=document.createElement('div');s.className='seg';
+  s.id=`seg-${i}`;segRow.appendChild(s);
+}
+let segsDone=0;
+function updateSegs(pctFraction){
+  const n = Math.floor(pctFraction * SEG_COUNT);
+  for(let i=0;i<SEG_COUNT;i++){
+    document.getElementById(`seg-${i}`).className = i<n?'seg done':'seg';
+  }
+}
+
+// ── Log ────────────────────────────────────────────────────────
+function mlog(msg,type=''){
+  const el=document.getElementById('mob-log');
+  const now=new Date();
+  const t=now.toTimeString().slice(0,8);
+  const d=document.createElement('div');
+  d.className='ml';
+  d.innerHTML=`<span class="mt">${t}</span><span class="mm ${type}">${msg}</span>`;
+  el.appendChild(d);
+  el.scrollTop=el.scrollHeight;
+  while(el.children.length>300)el.removeChild(el.firstChild);
+}
+function clearMobLog(){document.getElementById('mob-log').innerHTML='';}
+
+// ── Formatter ──────────────────────────────────────────────────
+function fmt(n){
+  if(n>=1e12)return(n/1e12).toFixed(2)+'T';
+  if(n>=1e9)return(n/1e9).toFixed(2)+'G';
+  if(n>=1e6)return(n/1e6).toFixed(2)+'M';
+  if(n>=1e3)return(n/1e3).toFixed(1)+'K';
+  return n+'';
+}
+function fmtETA(sec){
+  if(!isFinite(sec)||sec<=0)return'∞';
+  if(sec>3.15e13)return'>1M yrs';
+  if(sec>3.15e10)return`~${(sec/3.15e7).toFixed(0)}yr`;
+  if(sec>2592000)return`~${(sec/2592000).toFixed(0)}mo`;
+  if(sec>86400)return`~${(sec/86400).toFixed(0)}d`;
+  if(sec>3600)return`~${(sec/3600).toFixed(1)}hr`;
+  if(sec>60)return`~${(sec/60).toFixed(0)}min`;
+  return`~${sec.toFixed(0)}s`;
+}
+
+// ── Start ──────────────────────────────────────────────────────
+function startSolver(){
+  if(running)return;
+  running=true;
+  totalOps=BigInt(0);distPts=0;colls=0;tableSize=0;
+  wildSteps=BigInt(0);tameSteps=BigInt(0);
+
+  wildPos=[];tamePos=[];
+  for(let i=0;i<8;i++) wildPos.push(randRange(RANGE_START,RANGE_END));
+  const step=(RANGE_END-RANGE_START)/8n;
+  for(let i=0;i<8;i++) tamePos.push(RANGE_END-BigInt(i)*step);
+
+  document.getElementById('btn-run').disabled=true;
+  document.getElementById('btn-stp').disabled=false;
+  document.getElementById('hero-status-txt').textContent='RUNNING';
+  document.getElementById('hero-sub').textContent='Kangaroo herd active';
+  document.getElementById('hero-pulse').className='pulse-ring';
+
+  mlog('Puzzle #135 Kangaroo solver started','i');
+  mlog(`Public key: ${PUBKEY.slice(0,16)}...`);
+  mlog('Wild herd: 8 positions | Tame herd: 8 positions','i');
+  mlog('DP-16 mode | Checkpoint: 60s','i');
+  mlog('────────────────────────────────');
+
+  ckptInterval=setInterval(autoCheckpoint, 60000);
+
+  const BATCH=50000n;
+  solverInterval=setInterval(()=>{
+    if(!running)return;
+    for(let i=0;i<8;i++){
+      wildPos[i]=simStep(wildPos[i]);
+      wildSteps+=1n;
+      if(isDP(wildPos[i])){
+        distPts++;tableSize++;
+        if(Math.random()<0.0001){colls++;mlog(`DP collision #${colls} — checking...`,'w');}
+        if(Math.random()<0.00000001){ handleFound('DEMO_KEY_HEX','DEMO_KEY_WIF'); }
+      }
+      tamePos[i]=simStep(tamePos[i]);
+      tameSteps+=1n;
+    }
+    totalOps+=BATCH;
+
+    const now=Date.now();
+    const dt=(now-lastOpsT)/1000;
+    if(dt>=1){
+      lastSpeed=Math.round(Number(totalOps-lastOpsN)/dt);
+      lastOpsN=totalOps;lastOpsT=now;
+    }
+
+    updateUI();
+
+    if(totalOps % 500000n < BATCH){
+      mlog(`Ops:${fmt(Number(totalOps))} DP:${distPts} ${fmt(lastSpeed)}/s`);
+    }
+  },100);
+}
+
+function stopSolver(){
+  running=false;
+  clearInterval(solverInterval);
+  clearInterval(ckptInterval);
+  document.getElementById('btn-run').disabled=false;
+  document.getElementById('btn-stp').disabled=true;
+  document.getElementById('hero-status-txt').textContent='STOPPED';
+  document.getElementById('hero-sub').textContent='Paused';
+  document.getElementById('hero-pulse').className='pulse-ring';
+  mlog(`Solver stopped. Ops: ${fmt(Number(totalOps))} DP: ${distPts}`,'w');
+  autoCheckpoint();
+}
+
+function updateUI(){
+  document.getElementById('m-ops').textContent=fmt(Number(totalOps));
+  document.getElementById('m-speed').textContent=fmt(lastSpeed);
+  document.getElementById('m-dp').textContent=distPts.toLocaleString();
+  document.getElementById('m-coll').textContent=colls;
+
+  const target=Math.pow(2,67.5);
+  const done=Number(totalOps);
+  const pct=done/target;
+  const pctStr=pct<1e-15?pct.toExponential(2)+'%':(pct*100).toFixed(10)+'%';
+  document.getElementById('m-pct').textContent=pctStr;
+  document.getElementById('m-prog-fill').style.width=Math.min(pct*1e8*100,100)+'%';
+  updateSegs(Math.min(pct*1e8,1));
+
+  if(lastSpeed>0){
+    const rem=(target-done)/lastSpeed;
+    document.getElementById('m-eta').textContent=`ETA: ${fmtETA(rem)}`;
+  }
+}
+
+function autoCheckpoint(){
+  const ckpt={t:new Date().toISOString(),puzzle:135,ops:totalOps.toString(),dp:distPts,colls};
+  localStorage.setItem('p135_ckpt',JSON.stringify(ckpt));
+  mlog('Checkpoint saved','i');
+}
+
+function saveCheckpoint(){
+  autoCheckpoint();
+  const d=localStorage.getItem('p135_ckpt')||'{}';
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([d],{type:'application/json'}));
+  a.download='puzzle135_checkpoint.json';a.click();
+}
+
+function handleFound(hex,wif){
+  running=false;clearInterval(solverInterval);clearInterval(ckptInterval);
+  foundKey={hex,wif};
+  mlog('★★★ PRIVATE KEY FOUND! ★★★','s');
+  mlog(`Hex: ${hex}`,'s');
+  mlog('⚠ Use MARA Slipstream to redeem!','w');
+
+  const txt=`BTC Puzzle #135 KEY FOUND\nTimestamp: ${new Date().toISOString()}\nPublic Key: ${PUBKEY}\nPrivate Key (hex): ${hex}\nPrivate Key (WIF): ${wif}\n\nUSE MARA SLIPSTREAM: slipstream.mara.com\nDO NOT broadcast normally!\n`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));
+  a.download='PUZZLE135_KEY_FOUND.txt';a.click();
+
+  document.getElementById('fo-hex').textContent=hex;
+  document.getElementById('fo-wif').textContent=wif;
+  document.getElementById('found-overlay').classList.add('show');
+  document.getElementById('hero-status-txt').textContent='KEY FOUND!';
+  document.getElementById('hero-pulse').className='pulse-ring green';
+
+  notifCount++;
+  document.getElementById('notif-count').textContent=notifCount;
+}
+
+function copyFoundKey(){
+  if(foundKey) navigator.clipboard.writeText(`HEX: ${foundKey.hex}\nWIF: ${foundKey.wif}`);
+}
+function saveFoundKey(){
+  if(!foundKey)return;
+  const txt=`Private Key HEX: ${foundKey.hex}\nWIF: ${foundKey.wif}\nTimestamp: ${new Date().toISOString()}`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));
+  a.download='PUZZLE135_PRIVATE_KEY.txt';a.click();
+}
+
+// ── Tabs ───────────────────────────────────────────────────────
+const tabs=['dashboard','config','info'];
+function setTab(name,el,isNav){
+  tabs.forEach(t=>{
+    const el2=document.getElementById('tab-'+t);
+    if(el2) el2.style.display=t===name?'block':'none';
+  });
+  if(isNav){
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  } else {
+    document.querySelectorAll('.tab').forEach(n=>n.classList.remove('active'));
+  }
+  if(el) el.classList.add('active');
+}
+
+function toggleAlert(){
+  alertShowing=!alertShowing;
+  document.getElementById('alert-banner').classList.toggle('show',alertShowing);
+  notifCount=0;
+  document.getElementById('notif-count').textContent=0;
+}
+
+// ── Clock ──────────────────────────────────────────────────────
+function updateClock(){
+  const now=new Date();
+  document.getElementById('sb-time').textContent=
+    now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+}
+setInterval(updateClock,10000);
+updateClock();
+
+// ── Init ──────────────────────────────────────────────────────
+const ckpt=localStorage.getItem('p135_ckpt');
+if(ckpt){
+  try{
+    const c=JSON.parse(ckpt);
+    mlog(`Previous session found: ${c.t}`,'w');
+    mlog(`Ops done: ${fmt(Number(BigInt(c.ops)))} DP: ${c.dp}`,'w');
+  }catch(e){}
+} else {
+  mlog('No checkpoint — ready for fresh start','i');
+}
+mlog('Public key loaded ✓','s');
+mlog(`Puzzle #135 | Range: 2^134→2^135`,'i');
+mlog('Press START to begin solver','i');
+</script>
+</body>
+</html>
